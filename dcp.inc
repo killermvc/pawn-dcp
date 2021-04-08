@@ -32,6 +32,8 @@
 #define INVALID_DISCORD_COMMAND				-1
 
 #include <YSI_Storage\y_amx>
+#include <map>
+#include <discord-connector>
 
 
 #define DCP_MAX_MAP_COLLISIONS				10
@@ -50,8 +52,7 @@ enum _:e_DCP_SUCCESS {
 }
 
 new DCP_CommandInfo[DCP_MAX_COMMANDS][e_DCP_COMMAND_DATA];
-new DCP_CommandCollisionsCount[DCP_MAX_COMMANDS];
-new DCP_CommandIds[DCP_MAX_COMMANDS][DCP_MAX_MAP_COLLISIONS];
+new Map:DCP_CommandsMap<DCP_MAX_COMMANDS, DCP_MAX_MAP_COLLISIONS, MAX_FUNC_NAME>;
 new DCP_CommandCount;
 
 #if !defined DCP_MAX_ALLOWED_ROLES
@@ -148,13 +149,7 @@ stock bool:DCP_IsRoleAllowed(cmdid, DCC_Role:role) {
 }
 
 stock DCP_GetCommandId(const name[]) {
-	new hash = fnv1(name) % DCP_MAX_COMMANDS;
-	for(new i = 0; i < DCP_CommandCollisionsCount[hash]; i++) {
-		if(!strcmp(name, DCP_CommandInfo[DCP_CommandIds[hash][i]][e_DCP_COMMAND_DATA_NAME])) {
-			return DCP_CommandIds[hash][i];
-		}
-	}
-	return INVALID_DISCORD_COMMAND;
+	return Map_GetValue(DCP_CommandsMap, name);
 }
 
 #define DCP_SetEnabled(%0,%1)				DCP_CommandInfo[(%0)][e_DCP_COMMAND_DATA_DISABLED] = !(%1)
@@ -180,8 +175,6 @@ hook OnScriptInit() {
 		functionName[MAX_FUNC_NAME],
 		idx;
 
-	memset(DCP_CommandIds[0], INVALID_DISCORD_COMMAND, sizeof (DCP_CommandIds) * sizeof(DCP_CommandIds[]));
-
 	DCP_guild = DCC_FindGuildByName(DCP_GUILD_NAME);
 
     while ((idx = AMX_GetPublicNamePrefix(idx, functionName, _A<DCP_>))) {
@@ -206,22 +199,6 @@ public DCC_OnMessageCreate(DCC_Message:message) {
 			return OnDiscordMessageCreated(DCC_Message:message);
 		#endif
 	}
-}
-
-static const FNV_offset_basis = 2166136261;
-static const FNV_prime = 16777619;
-
-static stock fnv1(const str[], &len = -1) {
-    if(len < 0) {
-        len = strlen(str);
-    }
-
-    new hash = FNV_offset_basis, i;
-    while(i != len) {
-        hash = hash * FNV_prime;
-        hash = hash ^ str[i++];
-    }
-    return hash;
 }
 
 static stock DCP_ShiftRigth({DCC_Role, DCC_Channel}:array[], length, index) {
@@ -261,9 +238,7 @@ static stock DCP_BinarySearch({DCC_Role, DCC_Channel}:tofind, const {DCC_Role, D
 }
 
 static DCP_RegisterCommand(const name[]) {
-	new hash = fnv1(name) % DCP_MAX_COMMANDS;
-	DCP_CommandIds[hash][DCP_CommandCollisionsCount[hash]] = DCP_CommandCount;
-	DCP_CommandCollisionsCount[hash]++;
+	Map_Add(DCP_CommandsMap, name, DCP_CommandCount);
 	DCP_CommandInfo[DCP_CommandCount][e_DCP_COMMAND_DATA_NAME][0] = '\0';
 	strcat(DCP_CommandInfo[DCP_CommandCount][e_DCP_COMMAND_DATA_NAME], name, MAX_FUNC_NAME);
 	++DCP_CommandCount;
